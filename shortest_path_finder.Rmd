@@ -1,0 +1,348 @@
+---
+title: "Dijkstras Practice"
+output: html_document
+date: "2023-02-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gtools)
+```
+
+# Creating Example Problem
+
+##Step 1: Create the data frame of NODES
+```{r}
+nodes <- data.frame(
+  id = c("95758", "97752", "93405", "90210"),
+  node_type = c("home", "airport", "bus", "office")
+)
+head(nodes)
+```
+
+##Step 2: Create data frame of EDGES
+```{r}
+# Sample data frame
+df <- data.frame(
+  from = c("95758", "95758", "93405", "97752", "95758"),
+  to = c("90210", "93405", "90210", "90210", "97752"),
+  time1 = c(20,4,10,10,5),
+  wage = c(5,7,3,12,3),
+  travel_type = c("drive","drive","drive","drive","drive")
+) %>%
+  mutate(weight = time1*wage)
+
+# Add reverse edges with same weights
+df_reverse <- data.frame(
+  from = df$to,
+  to = df$from,
+  time1 = df$time1,
+  wage = df$wage,
+  weight = df$weight,
+  travel_type = df$travel_type
+)
+
+edges <- rbind(df, df_reverse) 
+edges <- edges %>%
+  mutate(id = as.integer(c(1:nrow(edges))))
+
+head(edges)
+```
+
+##Step 3: Make the GRAPH
+```{r}
+# Convert to graph
+library(igraph)
+graph <- graph_from_data_frame(d=edges, vertices = nodes, directed = TRUE)
+
+# Set the weights, ID's
+E(graph)$weight #<- df_both$weight
+
+E(graph)$travel_type
+
+# set the vertex.id attribute for each node
+V(graph)$id <- V(graph)$name
+
+# check the vertex.id attribute
+V(graph)$id
+
+# Plot the graph (optional)
+plot(graph)
+```
+
+
+```{r}
+# Find the shortest path between two nodes using Dijkstra's algorithm
+start <- "95758"
+end <- "90210"
+
+# Extract the node IDs of the shortest path
+path_nodes <- V(graph)$name[get.shortest.paths(graph, from = start, to = end)$vpath[[1]]]
+
+path_edges <- shortest_paths(graph, from = start, to = end, output = "both")$epath[[1]]
+
+# Print the shortest path and its length
+cat("Shortest path from", start, "to", end, ":", paste(path_nodes, collapse = " -> "), "\n")
+cat("Length:", sum(E(graph)[as.integer(paste(path_edges))]$weight))
+```
+
+This is just output from the examples if we need:
+```{r}
+as_adjacency_matrix(graph, attr="weight")
+as_data_frame(graph, what="edges")
+```
+example of graph edge output we can get
+```{r}
+E(graph)$id
+E(graph)$weight
+E(graph)$travel_type
+```
+example of node output we can get
+```{r}
+V(graph)$id
+V(graph)$node_type
+```
+
+
+## Make a function to take a df with start zipcodes and end zipcodes, and the graph and spit out a new column for the shortest length to get there
+```{r}
+find_shortest_paths <- function(df, graph) {
+  # Initialize a data frame to store the results
+  result <- data.frame(start = character(),
+                       end = character(),
+                       shortest_path = character(),
+                       weight_sum = numeric(),
+                       stringsAsFactors = FALSE)
+  
+  # Loop over each row in the input data frame
+  for (i in 1:nrow(df)) {
+    # Extract the start and end nodes from the current row
+    start <- df[i, 1]
+    end <- df[i, 2]
+    
+    # Find the shortest path between the start and end nodes
+    path <- shortest_paths(graph, from = start, to = end, output = "both")
+    path_nodes <- V(graph)$name[get.shortest.paths(graph, from = start, to = end)$vpath[[1]]]
+    shortest_path <- paste(path_nodes, collapse = " -> ")
+    
+    # Find the sum of the weights along the shortest path
+    path_edges <- shortest_paths(graph, from = start, to = end, output = "both")$epath[[1]]
+    weight_sum <- sum(E(graph)[path_edges]$weight)
+    
+    # Add the results to the output data frame
+    result <- rbind(result, data.frame(start = start, end = end, shortest_path = shortest_path, weight_sum = weight_sum))
+  }
+  
+  return(result)
+}
+
+```
+
+lets test this out: Create example df
+```{r}
+test_df <- data.frame(start = c("95758", "90210", "93405"),
+                 end = c("90210", "97752", "90210"),
+                 stringsAsFactors = FALSE)
+
+find_shortest_paths(test_df,graph)
+```
+Wow this worked hell yeah man.
+
+# Add in code to now adjust for wages:
+
+This is the part where I want to be able to have the weights change based off the wage of the employee.
+I want to build a function that calculates a new graph based off an employee's wage and find the shortest path from their start location to end location, returning the shortest path like above and the sum of the weights.
+
+```{r}
+# Sample data frame
+df2 <- data.frame(
+  from = c("95758", "95758", "93405", "97752", "95758"),
+  to = c("90210", "93405", "90210", "90210", "97752"),
+  fixed_cost = c(20,4,10,10,5),
+  variable_cost = c(1,2,1,3,1),
+  travel_type = c("drive","drive","drive","drive","drive")
+  #weight = ignore1*ignore2
+  #weight = c(100, 28, 30, 120, 15)
+) #%>%
+  #mutate(weight = time1*wage)
+
+# Add reverse edges with same weights
+df2_reverse <- data.frame(
+  from = df$to,
+  to = df$from,
+  fixed_cost = df2$fixed_cost,
+  variable_cost = df2$variable_cost,
+  travel_type = df2$travel_type
+)
+
+edges2 <- rbind(df2, df2_reverse) 
+edges2 <- edges2 %>%
+  mutate(id = as.integer(c(1:nrow(edges2))))
+
+head(edges2)
+```
+make df2
+```{r}
+test_df2 <- data.frame(start = c("95758", "90210", "93405"),
+                 end = c("90210", "97752", "90210"),
+                 wage = c(1,2,3),
+                 stringsAsFactors = FALSE)
+head(test_df2)
+```
+The above is what I want my sample input data to look like, the output of the function should be the extra two columns for the employee. nrow should be the same after the function is applied
+
+
+
+## Function accounting for different wages of employees
+
+__Try number 1__
+```{r}
+library(igraph)
+
+calculate_shortest_path <- function(edges, nodes, df2) {
+  # Initialize a data frame to store the results
+  result <- data.frame(start = character(),
+                       end = character(),
+                       shortest_path = character(),
+                       weight_sum = numeric(),
+                       stringsAsFactors = FALSE)
+
+  
+  # For each row in df2
+  for (i in 1:nrow(df2)) {
+    # Extract start and end nodes
+    start_node <- as.character(df2[i, "start"])
+    end_node <- as.character(df2[i, "end"])
+    
+    # Extract the wage from df2
+    wage <- df2[i, "wage"]
+    
+    # Add a new column to edges with the wage value
+    edges$wage <- wage
+    
+    # Calculate the weight based on fixed_cost, variable_cost and wage
+    edges<- edges %>%
+      mutate(weight = (variable_cost * wage) + fixed_cost,
+             id = as.integer(c(1:nrow(edges))))
+    
+    # Create an igraph from the edges dataframe
+    graph <- graph_from_data_frame(d=edges, vertices = nodes, directed = TRUE)
+    
+    # Find the shortest path between the start and end nodes
+    path <- shortest_paths(graph, from = start, to = end, output = "both")
+    path_nodes <- V(graph)$name[get.shortest.paths(graph, from = start, to = end)$vpath[[1]]]
+    shortest_path <- paste(path_nodes, collapse = " -> ")
+    
+    # Find the sum of the weights along the shortest path
+    path_edges <- shortest_paths(graph, from = start, to = end, output = "both")$epath[[1]]
+    weight_sum <- sum(E(graph)[path_edges]$weight)
+    
+    
+    # Calculate shortest path and weight
+    #shortest_path <- shortest_paths(graph, from = start_node, to = end_node, output = "both")
+    #path_nodes <- shortest_path$vpath[[1]]$name
+    #weight_sum <- sum(shortest_path$epath[[1]]$weight)
+    
+    # Add the result to the output dataframe
+    result <- rbind(result, data.frame(start = start, end = end, wage = wage, shortest_path = path_nodes, weight_sum = weight_sum))
+  }
+  
+  return(result)
+}
+```
+
+Try 1: why is this the output; help with the code I do not understand why it is returning so many rows. I dont think my loop is doing what I want
+```{r}
+calculate_shortest_path(edges2,nodes,test_df2)
+```
+
+_I dont really know what is happening wrong above here to fix. Need help with my loops and/or iteration._
+
+
+
+__Try number 2__
+```{r}
+calculate_shortest_path <- function(edges, nodes, df2) {
+  result <- data.frame(start_node = character(nrow(df2)), end_node = character(nrow(df2)), 
+                       shortest_path = I(list(rep(NA, nrow(df2)))), weight_sum = numeric(nrow(df2)), stringsAsFactors = FALSE)
+  
+  # For each row in df2
+  for (i in 1:nrow(df2)) {
+    # Extract start and end nodes
+    start_node <- as.character(df2[i, "start_node"])
+    end_node <- as.character(df2[i, "end_node"])
+    
+    # Extract the wage from df2
+    wage <- df2[i, "wage"]
+    
+    # Add a new column to edges with the wage value
+    edges$wage <- wage
+    
+    # Calculate the weight based on fixed_cost, variable_cost and wage
+    edges<- edges %>%
+      mutate(weight = (variable_cost * wage) + fixed_cost,
+             id = as.integer(c(1:nrow(edges))))
+    
+    # Create an igraph from the edges dataframe
+    graph <- graph_from_data_frame(d=edges, vertices = nodes, directed = TRUE)
+    
+    # Find the shortest path between the start and end nodes
+    path <- shortest_paths(graph, from = start, to = end, output = "both")
+    path_nodes <- V(graph)$name[get.shortest.paths(graph, from = start, to = end)$vpath[[1]]]
+    shortest_path <- paste(path_nodes, collapse = " -> ")
+    
+    # Find the sum of the weights along the shortest path
+    path_edges <- shortest_paths(graph, from = start, to = end, output = "both")$epath[[1]]
+    weight_sum <- sum(E(graph)[path_edges]$weight)
+    
+    # Assign the result to the output dataframe
+    result[i, c("start_node", "end_node", "shortest_path", "weight_sum")] <- list(start_node, end_node, path_nodes, weight_sum)
+  }
+  
+  return(result)
+}
+
+```
+
+```{r}
+calculate_shortest_path(edges2,nodes,test_df2)
+```
+Also did not work.
+
+
+Below is me trying to work through the steps of the function with examples
+
+```{r}
+edgesA <- edges2 %>%
+  mutate(wage = 189,
+         weight = (variable_cost * wage) + fixed_cost)
+graph2 <- graph_from_data_frame(d=edgesA, vertices = nodes, directed = TRUE)
+E(graph2)$weight
+E(graph2)
+```
+
+```{r}
+    # Calculate shortest path and weight
+    shortest_path <- shortest_paths(graph2, from = "95758", to = "90210", output = "both")
+    path_nodes <- shortest_path$vpath[[1]]$name
+    weight_sum <- sum(shortest_path$epath[[1]]$weight)
+    
+path_nodes
+weight_sum
+```
+
+
+```{r}
+plot(graph2)
+```
+
+
+
+
+
+
+
+
+
+
