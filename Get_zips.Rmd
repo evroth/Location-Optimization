@@ -1,0 +1,84 @@
+---
+title: "Creating Zips From Lat/Long"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gtools)
+library(zipcodeR)
+library(janitor)
+library(foreach)
+library(doParallel)
+library(future.apply)
+```
+
+Data not provided use your own
+
+## Read in data with closest two airports first manually
+```{r}
+closest_airports <- closest_airports %>%
+  clean_names()
+```
+
+Cleaned names^
+
+## Test search_radius function
+```{r}
+a <- search_radius(42.36430,-71.00520,radius = 10)
+a[1,1]
+```
+
+## Function to get zips
+
+```{r}
+add_zip_code <- function(df, lat_col, lon_col, radius, col_name) {
+  # convert lat_col and lon_col to numeric
+  df[[lat_col]] <- as.numeric(df[[lat_col]])
+  df[[lon_col]] <- as.numeric(df[[lon_col]])
+  
+  # add zip code column
+  df$zip_code <- apply(df[, c({{lat_col}}, {{lon_col}})], 1, function(row) {
+    res <- search_radius(row[1], row[2], radius = radius)
+    res[[1]][1]
+  })
+  
+#  df$zipcode <- apply(df, 1, function(row) {
+#    res <- search_radius(row[lat_col], row[lon_col], radius = radius)
+#    res[[1]][1]
+#  })
+  
+  # rename column "b" to "new_name"
+colnames(df)[colnames(df) == "zip_code"] <- {{col_name}}
+
+  return(df)
+}
+
+# example usage
+df <- data.frame(latitude = c(42.3601, 40.7128, 37.7749),
+                 longitude = c(-71.0589, -74.0060, -122.4194),
+                 random = c("hey","hi", "ho"))
+
+df_with_zip <- add_zip_code(df, lat_col = "latitude", lon_col = "longitude", radius = 10, col_name = "airport_1")
+print(df_with_zip)
+```
+```{r}
+res <- search_radius(42.3601	, -71.0589, radius = 10)
+res[[1]][1]
+```
+
+Testing...
+```{r}
+employee_airports_with_zip <- add_zip_code(closest_airports, lat_col = "latitude_1", lon_col = "longitude_1", radius = 1000, col_name = "airport_1_zip")
+```
+
+```{r}
+hubs_zips <- add_zip_code(hubs, lat_col = "latitude", lon_col = "longitude", radius = 1, col_name = "hub_zip")
+```
+
+I recommend against using this, since not all zip codes are 100% precise
+
+
+
+
